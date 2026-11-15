@@ -13,6 +13,7 @@ const sortSelect = document.getElementById("sort-select");
 
 let tasks = [];
 let editingTaskId = null;
+const notifiedTasks = new Set();
 
 
 // API helper
@@ -35,14 +36,120 @@ async function apiRequest(url, options = {}) {
 }
 
 
+// Get today's date without timezone problems
+function getToday() {
+    const now = new Date();
+
+    return new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate()
+    );
+}
+
+
+// Determine task deadline status
+function getDeadlineStatus(task) {
+    if (!task.due_date || task.completed) {
+        return "";
+    }
+
+    const dueDate = new Date(`${task.due_date}T00:00:00`);
+    const today = getToday();
+
+    if (dueDate < today) {
+        return "overdue";
+    }
+
+    if (dueDate.getTime() === today.getTime()) {
+        return "due-today";
+    }
+
+    return "upcoming";
+}
+
+
+// Create browser reminder button
+const reminderButton = document.createElement("button");
+reminderButton.type = "button";
+reminderButton.textContent = "🔔 Enable Reminders";
+reminderButton.className = "action-button";
+reminderButton.style.marginLeft = "10px";
+
+addButton.insertAdjacentElement("afterend", reminderButton);
+
+
+// Enable browser notifications after user clicks
+reminderButton.addEventListener("click", async () => {
+    if (!("Notification" in window)) {
+        alert("Your browser does not support notifications.");
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+        reminderButton.textContent = "🔔 Reminders Enabled";
+        checkReminders();
+        alert("Task reminders enabled successfully!");
+    } else {
+        alert("Please allow notifications in your browser settings.");
+    }
+});
+
+
+// Check upcoming and overdue tasks
+function checkReminders() {
+    if (!("Notification" in window) ||
+        Notification.permission !== "granted") {
+        return;
+    }
+
+    const today = getToday();
+
+    tasks.forEach(task => {
+        if (task.completed || !task.due_date) return;
+
+        const dueDate = new Date(`${task.due_date}T00:00:00`);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+
+        let message = "";
+
+        if (dueDate < today) {
+            message = "This task is overdue!";
+        } else if (dueDate.getTime() === today.getTime()) {
+            message = "This task is due today!";
+        } else if (dueDate.getTime() === tomorrow.getTime()) {
+            message = "This task is due tomorrow!";
+        }
+
+        const notificationKey = `${task.id}-${task.due_date}`;
+
+        if (message && !notifiedTasks.has(notificationKey)) {
+            new Notification(`TaskFlow: ${task.title}`, {
+                body: message,
+                icon: ""
+            });
+
+            notifiedTasks.add(notificationKey);
+        }
+    });
+}
+
+
 // Load all tasks
 async function loadTasks() {
     try {
         tasks = await apiRequest("/api/tasks");
+
         updateDashboard();
         renderTasks();
+        checkReminders();
+
     } catch (error) {
-        taskList.innerHTML = `<p class="empty-state">${error.message}</p>`;
+        taskList.innerHTML =
+            `<p class="empty-state">${error.message}</p>`;
     }
 }
 
@@ -90,6 +197,7 @@ function renderTasks() {
             if (!b.due_date) return -1;
             return a.due_date.localeCompare(b.due_date);
         });
+
     } else if (sort === "priority") {
         const priorityOrder = {
             High: 1,
@@ -100,6 +208,7 @@ function renderTasks() {
         filteredTasks.sort((a, b) =>
             priorityOrder[a.priority] - priorityOrder[b.priority]
         );
+
     } else {
         filteredTasks.sort((a, b) => b.id - a.id);
     }
@@ -113,8 +222,16 @@ function renderTasks() {
     taskList.replaceChildren();
 
     filteredTasks.forEach(task => {
+        const deadlineStatus = getDeadlineStatus(task);
+
         const card = document.createElement("article");
         card.className = `task-card ${task.completed ? "completed" : ""}`;
+
+        if (deadlineStatus === "overdue") {
+            card.classList.add("overdue");
+        } else if (deadlineStatus === "due-today") {
+            card.classList.add("due-today");
+        }
 
         const info = document.createElement("div");
         info.className = "task-info";
@@ -143,6 +260,26 @@ function renderTasks() {
             : "No due date";
 
         meta.append(priority, categoryLabel, date);
+
+        // Add deadline status label
+        if (deadlineStatus) {
+            const statusLabel = document.createElement("span");
+            statusLabel.className = "task-date-status";
+
+            if (deadlineStatus === "overdue") {
+                statusLabel.classList.add("overdue-label");
+                statusLabel.textContent = "Overdue";
+            } else if (deadlineStatus === "due-today") {
+                statusLabel.classList.add("today-label");
+                statusLabel.textContent = "Due Today";
+            } else {
+                statusLabel.classList.add("upcoming-label");
+                statusLabel.textContent = "Upcoming";
+            }
+
+            meta.appendChild(statusLabel);
+        }
+
         info.append(heading, description, meta);
 
         const actions = document.createElement("div");
@@ -289,6 +426,10 @@ if (categoryFilter) {
 if (sortSelect) {
     sortSelect.addEventListener("change", renderTasks);
 }
+
+
+// Refresh reminders while TaskFlow is open
+setInterval(checkReminders, 60000);
 
 
 // Load data when page opens
