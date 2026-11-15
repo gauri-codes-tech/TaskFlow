@@ -1,0 +1,239 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskFlow | Calendar</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .calendar-page {
+            max-width: 1100px;
+            margin: 35px auto;
+            padding: 25px;
+            background: white;
+            border-radius: 18px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.07);
+        }
+        .calendar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 22px;
+        }
+        .calendar-header button {
+            padding: 10px 17px;
+            border: none;
+            border-radius: 8px;
+            background: #6c63ff;
+            color: white;
+            cursor: pointer;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+        }
+        .calendar-day-name {
+            text-align: center;
+            font-weight: bold;
+            padding: 12px 2px;
+        }
+        .calendar-cell {
+            min-height: 105px;
+            padding: 8px;
+            border: 1px solid #eee;
+            border-radius: 9px;
+            background: #fafaff;
+            cursor: pointer;
+            overflow-wrap: anywhere;
+        }
+        .calendar-cell:hover {
+            border-color: #6c63ff;
+        }
+        .calendar-cell.today {
+            border: 2px solid #6c63ff;
+        }
+        .calendar-task {
+            display: block;
+            margin-top: 6px;
+            padding: 4px;
+            border-radius: 5px;
+            font-size: 11px;
+            background: #e8e6ff;
+            color: #5146c7;
+        }
+        .calendar-task.overdue {
+            background: #ffe2e2;
+            color: #c62828;
+        }
+        .calendar-task.completed {
+            background: #e0f5e8;
+            color: #16834b;
+        }
+        .calendar-details {
+            margin-top: 25px;
+            padding: 15px;
+            background: #f8f8ff;
+            border-radius: 10px;
+        }
+        @media(max-width:600px) {
+            .calendar-page { margin: 12px; padding: 12px; }
+            .calendar-grid { gap: 3px; }
+            .calendar-cell { min-height: 75px; padding: 4px; font-size: 12px; }
+            .calendar-task { font-size: 9px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="calendar-page">
+        <div class="calendar-header">
+            <h2>📅 Task Calendar</h2>
+            <div>
+                <button id="previous-month">← Previous</button>
+                <button id="next-month">Next →</button>
+                <button onclick="location.href='/'">Dashboard</button>
+            </div>
+        </div>
+
+        <h3 id="month-heading"></h3>
+
+        <div class="calendar-grid" id="calendar-grid"></div>
+
+        <div class="calendar-details">
+            <h3 id="selected-date">Select a date</h3>
+            <div id="date-tasks">Your tasks will appear here.</div>
+        </div>
+    </main>
+
+    <script>
+        let tasks = [];
+        let displayedMonth = new Date();
+        let selectedDate = "";
+
+        const grid = document.getElementById("calendar-grid");
+
+        async function loadTasks() {
+            try {
+                const response = await fetch("/api/tasks");
+
+                if (!response.ok) {
+                    throw new Error("Unable to load tasks. Please log in again.");
+                }
+
+                tasks = await response.json();
+                renderCalendar();
+            } catch (error) {
+                grid.textContent = error.message;
+            }
+        }
+
+        function dateKey(year, month, day) {
+            return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        }
+
+        function renderCalendar() {
+            grid.replaceChildren();
+
+            const year = displayedMonth.getFullYear();
+            const month = displayedMonth.getMonth();
+
+            document.getElementById("month-heading").textContent =
+                displayedMonth.toLocaleDateString("en-IN", {
+                    month: "long",
+                    year: "numeric"
+                });
+
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].forEach(day => {
+                const heading = document.createElement("div");
+                heading.className = "calendar-day-name";
+                heading.textContent = day;
+                grid.appendChild(heading);
+            });
+
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            for (let i = 0; i < firstDay; i++) {
+                grid.appendChild(document.createElement("div"));
+            }
+
+            const today = new Date();
+            const todayKey = dateKey(
+                today.getFullYear(),
+                today.getMonth(),
+                today.getDate()
+            );
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const key = dateKey(year, month, day);
+                const cell = document.createElement("div");
+                cell.className = "calendar-cell";
+
+                if (key === todayKey) {
+                    cell.classList.add("today");
+                }
+
+                const number = document.createElement("strong");
+                number.textContent = day;
+                cell.appendChild(number);
+
+                tasks.filter(task => task.due_date === key).forEach(task => {
+                    const item = document.createElement("span");
+                    item.className = "calendar-task";
+
+                    if (task.completed) {
+                        item.classList.add("completed");
+                    } else if (key < todayKey) {
+                        item.classList.add("overdue");
+                    }
+
+                    item.textContent = task.title;
+                    cell.appendChild(item);
+                });
+
+                cell.addEventListener("click", () => showDateTasks(key));
+                grid.appendChild(cell);
+            }
+        }
+
+        function showDateTasks(key) {
+            selectedDate = key;
+
+            document.getElementById("selected-date").textContent =
+                `Tasks for ${key}`;
+
+            const container = document.getElementById("date-tasks");
+            container.replaceChildren();
+
+            const selectedTasks = tasks.filter(task => task.due_date === key);
+
+            if (!selectedTasks.length) {
+                container.textContent = "No tasks scheduled for this date.";
+                return;
+            }
+
+            selectedTasks.forEach(task => {
+                const item = document.createElement("p");
+                item.textContent =
+                    `${task.completed ? "✓" : "○"} ${task.title} — ${task.priority} — ${task.category}`;
+                container.appendChild(item);
+            });
+        }
+
+        document.getElementById("previous-month").addEventListener("click", () => {
+            displayedMonth.setMonth(displayedMonth.getMonth() - 1);
+            renderCalendar();
+        });
+
+        document.getElementById("next-month").addEventListener("click", () => {
+            displayedMonth.setMonth(displayedMonth.getMonth() + 1);
+            renderCalendar();
+        });
+
+        loadTasks();
+    </script>
+</body>
+</html>

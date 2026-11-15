@@ -12,7 +12,11 @@ const categoryFilter = document.getElementById("category-filter");
 const sortSelect = document.getElementById("sort-select");
 
 let tasks = [];
+let statusChartInstance = null;
+let priorityChartInstance = null;
+let categoryChartInstance = null;
 let editingTaskId = null;
+
 const notifiedTasks = new Set();
 
 
@@ -71,6 +75,7 @@ function getDeadlineStatus(task) {
 
 // Create browser reminder button
 const reminderButton = document.createElement("button");
+
 reminderButton.type = "button";
 reminderButton.textContent = "🔔 Enable Reminders";
 reminderButton.className = "action-button";
@@ -100,8 +105,10 @@ reminderButton.addEventListener("click", async () => {
 
 // Check upcoming and overdue tasks
 function checkReminders() {
-    if (!("Notification" in window) ||
-        Notification.permission !== "granted") {
+    if (
+        !("Notification" in window) ||
+        Notification.permission !== "granted"
+    ) {
         return;
     }
 
@@ -111,6 +118,7 @@ function checkReminders() {
         if (task.completed || !task.due_date) return;
 
         const dueDate = new Date(`${task.due_date}T00:00:00`);
+
         const tomorrow = new Date(today);
         tomorrow.setDate(today.getDate() + 1);
 
@@ -128,8 +136,7 @@ function checkReminders() {
 
         if (message && !notifiedTasks.has(notificationKey)) {
             new Notification(`TaskFlow: ${task.title}`, {
-                body: message,
-                icon: ""
+                body: message
             });
 
             notifiedTasks.add(notificationKey);
@@ -141,9 +148,12 @@ function checkReminders() {
 // Load all tasks
 async function loadTasks() {
     try {
-        tasks = await apiRequest("/api/tasks");
+        const response = await apiRequest("/api/tasks");
+
+        tasks = Array.isArray(response) ? response : [];
 
         updateDashboard();
+        updateCharts();
         renderTasks();
         checkReminders();
 
@@ -157,25 +167,241 @@ async function loadTasks() {
 // Update dashboard statistics
 function updateDashboard() {
     const total = tasks.length;
-    const completed = tasks.filter(task => task.completed).length;
+
+    const completed = tasks.filter(
+        task => task.completed
+    ).length;
+
     const pending = total - completed;
+
+    const overdue = tasks.filter(
+        task => getDeadlineStatus(task) === "overdue"
+    ).length;
 
     document.getElementById("total-count").textContent = total;
     document.getElementById("pending-count").textContent = pending;
     document.getElementById("completed-count").textContent = completed;
+
+    const overdueElement = document.getElementById("overdue-count");
+
+    if (overdueElement) {
+        overdueElement.textContent = overdue;
+    }
+}
+
+
+// Get task priority counts
+function getPriorityCounts() {
+    const priorities = ["High", "Medium", "Low"];
+
+    const counts = priorities.map(priority =>
+        tasks.filter(task =>
+            String(task.priority || "").toLowerCase() === priority.toLowerCase()
+        ).length
+    );
+
+    return { priorities, counts };
+}
+
+
+// Get task category counts
+function getCategoryCounts() {
+    const categories = ["Work", "Study", "Personal", "Other"];
+
+    const counts = categories.map(category =>
+        tasks.filter(task => {
+            const taskCategory = String(
+                task.category || "Other"
+            ).trim().toLowerCase();
+
+            return taskCategory === category.toLowerCase();
+        }).length
+    );
+
+    return { categories, counts };
+}
+
+
+// Update all dashboard charts
+function updateCharts() {
+    if (typeof Chart === "undefined") {
+        console.warn("Chart.js could not be loaded.");
+        return;
+    }
+
+    const statusCanvas = document.getElementById("statusChart");
+    const priorityCanvas = document.getElementById("priorityChart");
+    const categoryCanvas = document.getElementById("categoryChart");
+
+    if (!statusCanvas || !priorityCanvas || !categoryCanvas) {
+        console.warn("One or more chart canvases were not found.");
+        return;
+    }
+
+    // Normalize completion values from the API
+    const completed = tasks.filter(task =>
+        task.completed === true ||
+        task.completed === 1 ||
+        task.completed === "1"
+    ).length;
+
+    const pending = tasks.length - completed;
+
+    const { priorities, counts: priorityCounts } =
+        getPriorityCounts();
+
+    const { categories, counts: categoryCounts } =
+        getCategoryCounts();
+
+
+    // Destroy previous charts before recreating
+    if (statusChartInstance) {
+        statusChartInstance.destroy();
+    }
+
+    if (priorityChartInstance) {
+        priorityChartInstance.destroy();
+    }
+
+    if (categoryChartInstance) {
+        categoryChartInstance.destroy();
+    }
+
+
+    // Task Status Doughnut Chart
+    statusChartInstance = new Chart(statusCanvas, {
+        type: "doughnut",
+
+        data: {
+            labels: ["Completed", "Pending"],
+
+            datasets: [{
+                data: [completed, pending],
+
+                backgroundColor: [
+                    "#22c55e",
+                    "#f59e0b"
+                ],
+
+                borderWidth: 2,
+                borderColor: "#ffffff"
+            }]
+        },
+
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            plugins: {
+                legend: {
+                    position: "bottom"
+                }
+            }
+        }
+    });
+
+
+    // Priority Distribution Bar Chart
+    priorityChartInstance = new Chart(priorityCanvas, {
+        type: "bar",
+
+        data: {
+            labels: priorities,
+
+            datasets: [{
+                label: "Number of Tasks",
+
+                data: priorityCounts,
+
+                backgroundColor: [
+                    "#ef4444",
+                    "#f59e0b",
+                    "#22c55e"
+                ],
+
+                borderRadius: 7,
+                maxBarThickness: 55
+            }]
+        },
+
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+
+            scales: {
+                y: {
+                    beginAtZero: true,
+
+                    ticks: {
+                        precision: 0,
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+
+
+    // Category Distribution Pie Chart
+    categoryChartInstance = new Chart(categoryCanvas, {
+        type: "pie",
+
+        data: {
+            labels: categories,
+
+            datasets: [{
+                data: categoryCounts,
+
+                backgroundColor: [
+                    "#6366f1",
+                    "#14b8a6",
+                    "#f59e0b",
+                    "#a78bfa"
+                ],
+
+                borderWidth: 2,
+                borderColor: "#ffffff"
+            }]
+        },
+
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            plugins: {
+                legend: {
+                    position: "bottom"
+                }
+            }
+        }
+    });
 }
 
 
 // Render tasks
 function renderTasks() {
     const searchText = searchInput.value.toLowerCase();
+
     const filter = filterSelect.value;
-    const category = categoryFilter ? categoryFilter.value : "all";
-    const sort = sortSelect ? sortSelect.value : "newest";
+
+    const category = categoryFilter
+        ? categoryFilter.value
+        : "all";
+
+    const sort = sortSelect
+        ? sortSelect.value
+        : "newest";
+
 
     let filteredTasks = tasks.filter(task => {
         const matchesSearch =
-            task.title.toLowerCase().includes(searchText) ||
+            (task.title || "").toLowerCase().includes(searchText) ||
             (task.description || "").toLowerCase().includes(searchText);
 
         const matchesStatus =
@@ -190,11 +416,13 @@ function renderTasks() {
         return matchesSearch && matchesStatus && matchesCategory;
     });
 
+
     // Sorting
     if (sort === "due-date") {
         filteredTasks.sort((a, b) => {
             if (!a.due_date) return 1;
             if (!b.due_date) return -1;
+
             return a.due_date.localeCompare(b.due_date);
         });
 
@@ -206,72 +434,100 @@ function renderTasks() {
         };
 
         filteredTasks.sort((a, b) =>
-            priorityOrder[a.priority] - priorityOrder[b.priority]
+            (priorityOrder[a.priority] || 4) -
+            (priorityOrder[b.priority] || 4)
         );
 
     } else {
         filteredTasks.sort((a, b) => b.id - a.id);
     }
 
+
     if (filteredTasks.length === 0) {
         taskList.innerHTML =
             `<p class="empty-state">No tasks found. Add a new task!</p>`;
+
         return;
     }
 
+
     taskList.replaceChildren();
+
 
     filteredTasks.forEach(task => {
         const deadlineStatus = getDeadlineStatus(task);
 
         const card = document.createElement("article");
-        card.className = `task-card ${task.completed ? "completed" : ""}`;
+
+        card.className =
+            `task-card ${task.completed ? "completed" : ""}`;
+
 
         if (deadlineStatus === "overdue") {
             card.classList.add("overdue");
+
         } else if (deadlineStatus === "due-today") {
             card.classList.add("due-today");
         }
 
+
         const info = document.createElement("div");
         info.className = "task-info";
+
 
         const heading = document.createElement("h3");
         heading.textContent = task.title;
 
+
         const description = document.createElement("p");
+
         description.textContent =
             task.description || "No description provided";
+
 
         const meta = document.createElement("div");
         meta.className = "task-meta";
 
+
         const priority = document.createElement("span");
-        priority.className = `priority ${task.priority}`;
+
+        priority.className =
+            `priority ${String(task.priority || "").toLowerCase()}`;
+
         priority.textContent = task.priority;
+
 
         const categoryLabel = document.createElement("span");
         categoryLabel.className = "task-category";
-        categoryLabel.textContent = task.category || "Other";
+
+        categoryLabel.textContent =
+            task.category || "Other";
+
 
         const date = document.createElement("span");
+
         date.textContent = task.due_date
             ? `Due: ${task.due_date}`
             : "No due date";
 
+
         meta.append(priority, categoryLabel, date);
+
 
         // Add deadline status label
         if (deadlineStatus) {
             const statusLabel = document.createElement("span");
+
             statusLabel.className = "task-date-status";
 
             if (deadlineStatus === "overdue") {
                 statusLabel.classList.add("overdue-label");
                 statusLabel.textContent = "Overdue";
+
             } else if (deadlineStatus === "due-today") {
                 statusLabel.classList.add("today-label");
                 statusLabel.textContent = "Due Today";
+
             } else {
                 statusLabel.classList.add("upcoming-label");
                 statusLabel.textContent = "Upcoming";
@@ -280,27 +536,53 @@ function renderTasks() {
             meta.appendChild(statusLabel);
         }
 
+
         info.append(heading, description, meta);
+
 
         const actions = document.createElement("div");
         actions.className = "task-actions";
 
+
         const completeBtn = document.createElement("button");
+
         completeBtn.className = "action-button";
-        completeBtn.textContent = task.completed ? "Undo" : "✓ Done";
-        completeBtn.addEventListener("click", () => toggleTask(task.id));
+
+        completeBtn.textContent =
+            task.completed ? "Undo" : "✓ Done";
+
+        completeBtn.addEventListener(
+            "click",
+            () => toggleTask(task.id)
+        );
+
 
         const editBtn = document.createElement("button");
+
         editBtn.className = "action-button";
         editBtn.textContent = "Edit";
-        editBtn.addEventListener("click", () => editTask(task.id));
+
+        editBtn.addEventListener(
+            "click",
+            () => editTask(task.id)
+        );
+
 
         const deleteBtn = document.createElement("button");
-        deleteBtn.className = "action-button delete-button";
+
+        deleteBtn.className =
+            "action-button delete-button";
+
         deleteBtn.textContent = "Delete";
-        deleteBtn.addEventListener("click", () => deleteTask(task.id));
+
+        deleteBtn.addEventListener(
+            "click",
+            () => deleteTask(task.id)
+        );
+
 
         actions.append(completeBtn, editBtn, deleteBtn);
+
         card.append(info, actions);
 
         taskList.appendChild(card);
@@ -311,8 +593,12 @@ function renderTasks() {
 // Open add task form
 addButton.addEventListener("click", () => {
     resetForm();
+
     formCard.classList.remove("hidden");
-    document.getElementById("form-heading").textContent = "Add New Task";
+
+    document.getElementById("form-heading").textContent =
+        "Add New Task";
+
     document.getElementById("task-title").focus();
 });
 
@@ -320,9 +606,12 @@ addButton.addEventListener("click", () => {
 // Close form
 cancelButton.addEventListener("click", resetForm);
 
+
 function resetForm() {
     taskForm.reset();
+
     editingTaskId = null;
+
     formCard.classList.add("hidden");
 }
 
@@ -333,11 +622,16 @@ taskForm.addEventListener("submit", async (event) => {
 
     const taskData = {
         title: document.getElementById("task-title").value.trim(),
+
         description: document.getElementById("task-description").value.trim(),
+
         priority: document.getElementById("task-priority").value,
+
         due_date: document.getElementById("task-date").value,
+
         category: document.getElementById("task-category").value
     };
+
 
     try {
         if (editingTaskId !== null) {
@@ -345,6 +639,7 @@ taskForm.addEventListener("submit", async (event) => {
                 method: "PUT",
                 body: JSON.stringify(taskData)
             });
+
         } else {
             await apiRequest("/api/tasks", {
                 method: "POST",
@@ -353,6 +648,7 @@ taskForm.addEventListener("submit", async (event) => {
         }
 
         resetForm();
+
         await loadTasks();
 
     } catch (error) {
@@ -369,14 +665,26 @@ function editTask(id) {
 
     editingTaskId = id;
 
-    document.getElementById("form-heading").textContent = "Edit Task";
-    document.getElementById("task-title").value = task.title;
-    document.getElementById("task-description").value = task.description || "";
-    document.getElementById("task-priority").value = task.priority;
-    document.getElementById("task-date").value = task.due_date || "";
-    document.getElementById("task-category").value = task.category || "Personal";
+    document.getElementById("form-heading").textContent =
+        "Edit Task";
+
+    document.getElementById("task-title").value =
+        task.title;
+
+    document.getElementById("task-description").value =
+        task.description || "";
+
+    document.getElementById("task-priority").value =
+        task.priority;
+
+    document.getElementById("task-date").value =
+        task.due_date || "";
+
+    document.getElementById("task-category").value =
+        task.category || "Personal";
 
     formCard.classList.remove("hidden");
+
     document.getElementById("task-title").focus();
 }
 
@@ -417,6 +725,7 @@ async function deleteTask(id) {
 
 // Search, status, category and sorting
 searchInput.addEventListener("input", renderTasks);
+
 filterSelect.addEventListener("change", renderTasks);
 
 if (categoryFilter) {

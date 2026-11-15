@@ -55,7 +55,7 @@
         .auth-card {
             width: 100%;
             max-width: 450px;
-            background: rgba(255,255,255,.97);
+            background: rgba(255,255,255,.98);
             padding: 42px;
             border-radius: 24px;
             box-shadow: 0 25px 70px rgba(15, 10, 60, .3);
@@ -141,6 +141,10 @@
             border-color: #6366f1;
             background: white;
             box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+        }
+
+        .form-group input::placeholder {
+            color: #94a3b8;
         }
 
         .password-wrapper {
@@ -247,25 +251,31 @@
             <p>Sign in to continue to your workspace.</p>
         </div>
 
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for message in messages %}
-                    <div class="message">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+        {% if error %}
+    <div class="message">{{ error }}</div>
+    {% endif %}
 
-        <form method="POST" action="{{ url_for('login') }}">
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        {% for message in messages %}
+            <div class="message">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+        <form method="POST" action="{{ url_for('login') }}" autocomplete="off">
 
             <div class="form-group">
                 <label for="email">Email Address</label>
                 <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    placeholder="Enter your email address"
-                    required
-                    autocomplete="email"
+                type="email"
+                id="email"
+                name="email"
+                placeholder="Enter your email address"
+                value="{{ email|default('', true) }}"
+                required
+                autocomplete="off"
+                autocapitalize="none"
+                spellcheck="false"
                 >
             </div>
 
@@ -274,12 +284,12 @@
 
                 <div class="password-wrapper">
                     <input
-                        type="password"
-                        id="password"
-                        name="password"
-                        placeholder="Enter your password"
-                        required
-                        autocomplete="current-password"
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="Enter your password"
+                    required
+                    autocomplete="off"
                     >
 
                     <button

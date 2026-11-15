@@ -89,10 +89,50 @@
                 <div class="stat-card">
                     <div class="stat-icon green">✓</div>
                     <p>Completed Tasks</p>
+                    <div class="stat-card">
+                    <div class="stat-icon orange">⚠</div>
+                    <p>Overdue Tasks</p>
+                    <h2 id="overdue-count">0</h2>
+                    </div>
                     <h2 id="completed-count">0</h2>
                 </div>
 
             </section>
+            
+<!-- Productivity Analytics -->
+<section class="task-section">
+    <div class="section-heading">
+        <div>
+            <p class="welcome">YOUR PERFORMANCE</p>
+            <h2>Productivity Analytics</h2>
+        </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px;">
+
+        <div class="stat-card" style="min-height:300px;">
+            <h3>Task Status</h3>
+            <div style="height:240px;">
+                <canvas id="statusChart"></canvas>
+            </div>
+        </div>
+
+        <div class="stat-card" style="min-height:300px;">
+            <h3>Priority Distribution</h3>
+            <div style="height:240px;">
+                <canvas id="priorityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="stat-card" style="min-height:300px;">
+            <h3>Category Distribution</h3>
+            <div style="height:240px;">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+
+    </div>
+</section>
 
             <!-- Task Section -->
             <section class="task-section" id="task-section">
@@ -106,6 +146,13 @@
                     <button class="primary-button" id="add-task-btn">
                         + Add New Task
                     </button>
+                    <a href="/calendar" class="action-button" style="text-decoration:none; display:inline-block;">
+                        📅 Calendar View
+                    </a>
+                    <a href="/profile" class="action-button"
+                        style="text-decoration:none; display:inline-block;">
+                         👤 My Profile
+                    </a>
                 </div>
 
                 <!-- Search and Filters -->
@@ -221,6 +268,7 @@
 
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{{ url_for('static', filename='script.js') }}"></script>
 
 </body>

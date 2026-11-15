@@ -1,0 +1,140 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TaskFlow | My Profile</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        .profile-page {
+            max-width: 650px;
+            margin: 35px auto;
+            padding: 25px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 5px 25px rgba(0,0,0,.07);
+        }
+        .profile-page h2 { margin-bottom: 20px; }
+        .profile-page form { margin-bottom: 25px; }
+        .profile-page label {
+            display: block;
+            margin: 12px 0 6px;
+            font-weight: 600;
+        }
+        .profile-page input {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-sizing: border-box;
+        }
+        .profile-page button {
+            margin-top: 15px;
+            padding: 11px 18px;
+            background: #6c63ff;
+            color: white;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .profile-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            background: #e8f8ef;
+            color: #16834b;
+        }
+        .profile-error {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            background: #ffe8e8;
+            color: #bd2929;
+        }
+        .profile-divider {
+            border: 0;
+            border-top: 1px solid #eee;
+            margin: 25px 0;
+        }
+    </style>
+</head>
+<body>
+    <main class="profile-page">
+        <h2>👤 My Profile</h2>
+
+        {% if message %}
+            <div class="profile-message">{{ message }}</div>
+        {% endif %}
+
+        {% if error %}
+            <div class="profile-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('profile') }}">
+            <h3>Personal Information</h3>
+
+            <label>First Name</label>
+            <input type="text" name="first_name"
+                   value="{{ user['first_name'] or '' }}" required>
+
+            <label>Last Name</label>
+            <input type="text" name="last_name"
+                   value="{{ user['last_name'] or '' }}" required>
+
+            <label>Username</label>
+            <input type="text" value="{{ user['username'] }}" disabled>
+
+            <label>Email Address</label>
+            <input type="email" name="email"
+                   value="{{ user['email'] }}" required>
+
+            <button type="submit">Save Profile</button>
+        </form>
+
+        <hr class="profile-divider">
+
+        
+<form method="POST" action="{{ url_for('change_password') }}">
+    <h3>🔒 Change Password</h3>
+
+    <label>Current Password</label>
+    <input
+        type="password"
+        name="current_password"
+        required
+    >
+
+    <label>New Password</label>
+    <input
+        type="password"
+        id="new_password"
+        name="new_password"
+        minlength="8"
+        maxlength="16"
+        required
+    >
+
+    <label>Confirm New Password</label>
+    <input
+        type="password"
+        id="confirm_password"
+        name="confirm_password"
+        minlength="8"
+        maxlength="16"
+        required
+    >
+
+    <p style="font-size:13px;color:#666;">
+        Password must contain 8–16 characters, at least one
+        uppercase letter, one number and one special symbol.
+    </p>
+
+    <button type="submit">Update Password</button>
+</form>
+
+
+        <a href="/">← Back to Dashboard</a>
+    </main>
+</body>
+</html>

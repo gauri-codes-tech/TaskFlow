@@ -118,6 +118,7 @@ def home():
     )
 
 
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if "user_id" in session:
@@ -148,10 +149,18 @@ def register():
                 error="Please enter a valid email address."
             )
 
-        if len(password) < 8:
+        password_pattern = (
+            r"^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s])\S{8,16}$"
+        )
+
+        if not re.match(password_pattern, password):
             return render_template(
                 "register.html",
-                error="Password must contain at least 8 characters."
+                error=(
+                    "Password must be 8–16 characters long and contain "
+                    "at least one uppercase letter, one number, and "
+                    "one special character. Spaces are not allowed."
+                )
             )
 
         conn = get_db_connection()
@@ -207,6 +216,7 @@ def register():
     return render_template("register.html")
 
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if "user_id" in session:
@@ -229,17 +239,24 @@ def login():
         ).fetchone()
         conn.close()
 
-        if user and check_password_hash(user["password_hash"], password):
-            set_user_session(user)
-            return redirect(url_for("home"))
+        if not user:
+            return render_template(
+                "login.html",
+                error="This email is not registered. Please create an account.",
+                email=email
+            )
 
-        return render_template(
-            "login.html",
-            error="Incorrect email or password."
-        )
+        if not check_password_hash(user["password_hash"], password):
+            return render_template(
+                "login.html",
+                error="Incorrect password. Please enter the correct password.",
+                email=email
+            )
+
+        set_user_session(user)
+        return redirect(url_for("home"))
 
     return render_template("login.html")
-
 
 @app.route("/logout")
 @login_required
@@ -247,6 +264,138 @@ def logout():
     session.clear()
     return redirect(url_for("login"))
 
+@app.route("/calendar")
+@login_required
+def calendar():
+    return render_template("calendar.html")
+
+
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def profile():
+    user = get_logged_in_user()
+
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    message = None
+    error = None
+
+    if request.method == "POST":
+        first_name = request.form.get("first_name", "").strip()
+        last_name = request.form.get("last_name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+
+        if not first_name or not last_name:
+            error = "Please enter your first and last name."
+        elif not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            error = "Please enter a valid email address."
+        else:
+            conn = get_db_connection()
+
+            try:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET first_name = ?, last_name = ?, email = ?
+                    WHERE id = ?
+                    """,
+                    (first_name, last_name, email, session["user_id"])
+                )
+                conn.commit()
+                message = "Profile updated successfully!"
+
+            except sqlite3.IntegrityError:
+                conn.rollback()
+                error = "This email address is already registered."
+
+            finally:
+                conn.close()
+
+        user = get_logged_in_user()
+
+        if user:
+            set_user_session(user)
+
+    return render_template(
+        "profile.html",
+        user=user,
+        message=message,
+        error=error
+    )
+
+
+@app.route("/change-password", methods=["POST"])
+@login_required
+def change_password():
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    user = get_logged_in_user()
+
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    conn = get_db_connection()
+
+    full_user = conn.execute(
+        "SELECT password_hash FROM users WHERE id = ?",
+        (session["user_id"],)
+    ).fetchone()
+
+    if not check_password_hash(full_user["password_hash"], current_password):
+        conn.close()
+        return render_template(
+            "profile.html",
+            user=user,
+            error="Your current password is incorrect."
+        )
+
+    # Password validation
+    password_pattern = r"^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s])\S{8,16}$"
+
+    if not re.match(password_pattern, new_password):
+        conn.close()
+        return render_template(
+            "profile.html",
+            user=user,
+            error="Password must be 8-16 characters and contain at least one uppercase letter, one number and one special symbol. Spaces are not allowed."
+        )
+
+    if new_password != confirm_password:
+        conn.close()
+        return render_template(
+            "profile.html",
+            user=user,
+            error="New passwords do not match."
+        )
+
+    if check_password_hash(full_user["password_hash"], new_password):
+        conn.close()
+        return render_template(
+            "profile.html",
+            user=user,
+            error="Your new password must be different from your current password."
+        )
+
+    new_hash = generate_password_hash(new_password)
+
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_hash, session["user_id"])
+    )
+
+    conn.commit()
+    conn.close()
+
+    return render_template(
+        "profile.html",
+        user=user,
+        message="Password changed successfully!"
+    )
 
 @app.route("/api/tasks", methods=["GET"])
 @login_required
