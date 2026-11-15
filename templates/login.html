@@ -1,0 +1,328 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | TaskFlow</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Inter', sans-serif;
+            background:
+                radial-gradient(circle at 15% 20%, rgba(167,139,250,.65), transparent 30%),
+                radial-gradient(circle at 85% 80%, rgba(129,140,248,.55), transparent 32%),
+                linear-gradient(135deg, #1e1b4b 0%, #3730a3 45%, #6d28d9 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 30px 16px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,.15);
+            pointer-events: none;
+        }
+
+        body::before {
+            width: 350px;
+            height: 350px;
+            top: -130px;
+            right: -100px;
+        }
+
+        body::after {
+            width: 250px;
+            height: 250px;
+            bottom: -100px;
+            left: -80px;
+        }
+
+        .auth-card {
+            width: 100%;
+            max-width: 450px;
+            background: rgba(255,255,255,.97);
+            padding: 42px;
+            border-radius: 24px;
+            box-shadow: 0 25px 70px rgba(15, 10, 60, .3);
+            position: relative;
+            z-index: 1;
+        }
+
+        .brand {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .brand-icon {
+            width: 58px;
+            height: 58px;
+            margin: 0 auto 16px;
+            border-radius: 18px;
+            background: linear-gradient(135deg, #6366f1, #7c3aed);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            font-weight: 800;
+            box-shadow: 0 8px 20px rgba(99,102,241,.3);
+        }
+
+        .brand h1 {
+            color: #1e1b4b;
+            font-size: 30px;
+            font-weight: 800;
+            margin: 0 0 8px;
+        }
+
+        .brand p {
+            color: #64748b;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .welcome {
+            margin-bottom: 25px;
+        }
+
+        .welcome h2 {
+            color: #1e293b;
+            font-size: 22px;
+            margin: 0 0 7px;
+        }
+
+        .welcome p {
+            color: #64748b;
+            font-size: 14px;
+            margin: 0;
+        }
+
+        .form-group {
+            margin-bottom: 19px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 14px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 11px;
+            outline: none;
+            font-size: 14px;
+            font-family: inherit;
+            color: #1e293b;
+            background: #f8fafc;
+            transition: .2s;
+        }
+
+        .form-group input:focus {
+            border-color: #6366f1;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(99,102,241,.12);
+        }
+
+        .password-wrapper {
+            position: relative;
+        }
+
+        .password-wrapper input {
+            padding-right: 65px;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: none;
+            background: none;
+            color: #6366f1;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .login-button {
+            width: 100%;
+            padding: 15px;
+            margin-top: 8px;
+            border: none;
+            border-radius: 11px;
+            color: white;
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            font-size: 15px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 8px 18px rgba(99,102,241,.25);
+            transition: .2s;
+        }
+
+        .login-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(99,102,241,.35);
+        }
+
+        .message {
+            padding: 11px 13px;
+            margin-bottom: 18px;
+            border-radius: 9px;
+            background: #fef2f2;
+            color: #b91c1c;
+            font-size: 13px;
+        }
+
+        .register-link {
+            text-align: center;
+            margin-top: 25px;
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .register-link a {
+            color: #4f46e5;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+
+        .secure-note {
+            text-align: center;
+            margin-top: 23px;
+            padding-top: 18px;
+            border-top: 1px solid #e2e8f0;
+            color: #94a3b8;
+            font-size: 11px;
+        }
+
+        @media (max-width: 480px) {
+            .auth-card {
+                padding: 30px 23px;
+            }
+
+            .brand h1 {
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="auth-card">
+
+        <div class="brand">
+            <div class="brand-icon">✓</div>
+            <h1>TaskFlow</h1>
+            <p>Organize your work. Achieve more.</p>
+        </div>
+
+        <div class="welcome">
+            <h2>Welcome Back!</h2>
+            <p>Sign in to continue to your workspace.</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="message">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('login') }}">
+
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    placeholder="Enter your email address"
+                    required
+                    autocomplete="email"
+                >
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+
+                <div class="password-wrapper">
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        placeholder="Enter your password"
+                        required
+                        autocomplete="current-password"
+                    >
+
+                    <button
+                        type="button"
+                        class="toggle-password"
+                        onclick="togglePassword()"
+                    >
+                        Show
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="login-button">
+                Sign In →
+            </button>
+
+        </form>
+
+        <div class="register-link">
+            Don't have an account?
+            <a href="{{ url_for('register') }}">Create an account</a>
+        </div>
+
+        <div class="secure-note">
+            🔒 Your workspace is private and secure.
+        </div>
+
+    </div>
+
+    <script>
+        function togglePassword() {
+            const password = document.getElementById("password");
+            const button = document.querySelector(".toggle-password");
+
+            if (password.type === "password") {
+                password.type = "text";
+                button.textContent = "Hide";
+            } else {
+                password.type = "password";
+                button.textContent = "Show";
+            }
+        }
+    </script>
+
+</body>
+</html>

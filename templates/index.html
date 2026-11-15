@@ -1,0 +1,227 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>TaskFlow | Task Management</title>
+
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">✓</span>
+                <h2>TaskFlow</h2>
+            </div>
+
+            <p class="menu-heading">MENU</p>
+
+            <nav>
+                <a href="#" class="nav-item active">▦ Dashboard</a>
+                <a href="#task-section" class="nav-item">☑ My Tasks</a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <p>Stay organized.</p>
+                <p>Get things done.</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+
+            <header class="topbar">
+                <div>
+                    <p class="welcome">WORKSPACE</p>
+                    <h1>My Dashboard</h1>
+                </div>
+
+                <div class="profile">
+                    <div class="profile-avatar">
+                        {{ initials }}
+                    </div>
+
+                    <div class="profile-info">
+                        <strong>{{ workspace_name }}</strong>
+                        <small>Personal Workspace</small>
+                    </div>
+
+                    <a href="{{ url_for('logout') }}" class="logout-button">
+                        Logout
+                    </a>
+                </div>
+            </header>
+
+            <!-- Welcome Section -->
+            <section class="welcome-card">
+                <div>
+                    <p class="welcome-label">YOUR PRODUCTIVITY SPACE</p>
+                    <h2>Manage your tasks efficiently.</h2>
+                    <p>Plan your day, track your progress and achieve more.</p>
+                </div>
+
+                <div class="welcome-symbol">✓</div>
+            </section>
+
+            <!-- Statistics -->
+            <section class="stats-grid">
+
+                <div class="stat-card">
+                    <div class="stat-icon purple">▦</div>
+                    <p>Total Tasks</p>
+                    <h2 id="total-count">0</h2>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon orange">◷</div>
+                    <p>Pending Tasks</p>
+                    <h2 id="pending-count">0</h2>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-icon green">✓</div>
+                    <p>Completed Tasks</p>
+                    <h2 id="completed-count">0</h2>
+                </div>
+
+            </section>
+
+            <!-- Task Section -->
+            <section class="task-section" id="task-section">
+
+                <div class="section-heading">
+                    <div>
+                        <p class="welcome">TASK ORGANIZATION</p>
+                        <h2>My Tasks</h2>
+                    </div>
+
+                    <button class="primary-button" id="add-task-btn">
+                        + Add New Task
+                    </button>
+                </div>
+
+                <!-- Search and Filters -->
+                <div class="toolbar">
+
+                    <input
+                        type="text"
+                        id="search-input"
+                        placeholder="Search tasks..."
+                    >
+
+                    <select id="filter-select">
+                        <option value="all">All Tasks</option>
+                        <option value="pending">Pending</option>
+                        <option value="completed">Completed</option>
+                    </select>
+
+                    <select id="category-filter">
+                        <option value="all">All Categories</option>
+                        <option value="Work">Work</option>
+                        <option value="Study">Study</option>
+                        <option value="Personal">Personal</option>
+                        <option value="Other">Other</option>
+                    </select>
+
+                    <select id="sort-select">
+                        <option value="newest">Newest First</option>
+                        <option value="due-date">Due Date (Earliest)</option>
+                        <option value="priority">Priority (High to Low)</option>
+                    </select>
+
+                </div>
+
+                <!-- Task Form -->
+                <div class="form-card hidden" id="task-form-card">
+
+                    <h3 id="form-heading">Add New Task</h3>
+
+                    <form id="task-form">
+
+                        <label for="task-title">Task Title</label>
+                        <input
+                            type="text"
+                            id="task-title"
+                            placeholder="Enter task title"
+                            required
+                            maxlength="120"
+                        >
+
+                        <label for="task-description">Description</label>
+                        <textarea
+                            id="task-description"
+                            placeholder="Enter task description"
+                            rows="3"
+                        ></textarea>
+
+                        <div class="form-row">
+
+                            <div>
+                                <label for="task-priority">Priority</label>
+                                <select id="task-priority">
+                                    <option value="Low">Low</option>
+                                    <option value="Medium" selected>Medium</option>
+                                    <option value="High">High</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="task-date">Due Date</label>
+                                <input type="date" id="task-date">
+                            </div>
+
+                        </div>
+
+                        <!-- Category -->
+                        <label for="task-category">Task Category</label>
+                        <select id="task-category">
+                            <option value="Work">Work</option>
+                            <option value="Study">Study</option>
+                            <option value="Personal" selected>Personal</option>
+                            <option value="Other">Other</option>
+                        </select>
+
+                        <div class="form-actions">
+                            <button type="submit" class="primary-button">
+                                Save Task
+                            </button>
+
+                            <button
+                                type="button"
+                                class="cancel-button"
+                                id="cancel-btn">
+                                Cancel
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+
+                <!-- Task List -->
+                <div id="task-list" class="task-list">
+                    <p class="empty-state">Loading tasks...</p>
+                </div>
+
+            </section>
+
+            <footer>
+                TaskFlow © 2026 | Built with Flask, SQLite and JavaScript
+            </footer>
+
+        </main>
+
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
