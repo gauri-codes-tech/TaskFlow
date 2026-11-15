@@ -3,24 +3,38 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, s
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from pathlib import Path
-import sqlite3
+from dotenv import load_dotenv
+from psycopg.rows import dict_row
+import psycopg
 import re
+import os
 
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "tasks.db"
+load_dotenv(BASE_DIR / ".env")
 
-app.secret_key = "taskflow-local-secret-key-2026-change-before-deployment"
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+app.secret_key = os.environ.get(
+    "SECRET_KEY",
+    "taskflow-local-development-key"
+)
+
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 CATEGORIES = ["Work", "Study", "Personal", "Other"]
 
 
 def get_db_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is missing from .env")
+
+    return psycopg.connect(
+        DATABASE_URL,
+        row_factory=dict_row
+    )
 
 
 def set_user_session(user):
@@ -50,17 +64,20 @@ def get_logged_in_user():
         return None
 
     conn = get_db_connection()
-    user = conn.execute(
-        """
-        SELECT id, first_name, last_name, username, email
-        FROM users
-        WHERE id = ?
-        """,
-        (user_id,)
-    ).fetchone()
-    conn.close()
 
-    return user
+    try:
+        user = conn.execute(
+            """
+            SELECT id, first_name, last_name, username, email
+            FROM users
+            WHERE id = %s
+            """,
+            (user_id,)
+        ).fetchone()
+
+        return user
+    finally:
+        conn.close()
 
 
 def login_required(function):
@@ -83,7 +100,7 @@ def task_to_dict(task):
         "description": task["description"] or "",
         "priority": task["priority"],
         "due_date": task["due_date"] or "",
-        "category": task["category"] if "category" in task.keys() else "Other",
+        "category": task["category"] or "Other",
         "completed": bool(task["completed"])
     }
 
@@ -116,7 +133,6 @@ def home():
         initials=session["initials"],
         workspace_name=workspace_name
     )
-
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -167,8 +183,8 @@ def register():
 
         try:
             existing_users = conn.execute(
-                "SELECT COUNT(*) FROM users"
-            ).fetchone()[0]
+                "SELECT COUNT(*) AS count FROM users"
+            ).fetchone()["count"]
 
             password_hash = generate_password_hash(password)
 
@@ -176,18 +192,19 @@ def register():
                 """
                 INSERT INTO users
                 (first_name, last_name, username, email, password_hash)
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 """,
                 (first_name, last_name, username, email, password_hash)
             )
 
-            user_id = cursor.lastrowid
+            user_id = cursor.fetchone()["id"]
 
             if existing_users == 0:
                 conn.execute(
                     """
                     UPDATE tasks
-                    SET user_id = ?
+                    SET user_id = %s
                     WHERE user_id IS NULL
                     """,
                     (user_id,)
@@ -196,14 +213,14 @@ def register():
             conn.commit()
 
             user = conn.execute(
-                "SELECT * FROM users WHERE id = ?",
+                "SELECT * FROM users WHERE id = %s",
                 (user_id,)
             ).fetchone()
 
             set_user_session(user)
             return redirect(url_for("home"))
 
-        except sqlite3.IntegrityError:
+        except psycopg.IntegrityError:
             conn.rollback()
             return render_template(
                 "register.html",
@@ -214,7 +231,6 @@ def register():
             conn.close()
 
     return render_template("register.html")
-
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -233,11 +249,14 @@ def login():
         password = request.form.get("password", "")
 
         conn = get_db_connection()
-        user = conn.execute(
-            "SELECT * FROM users WHERE email = ?",
-            (email,)
-        ).fetchone()
-        conn.close()
+
+        try:
+            user = conn.execute(
+                "SELECT * FROM users WHERE email = %s",
+                (email,)
+            ).fetchone()
+        finally:
+            conn.close()
 
         if not user:
             return render_template(
@@ -258,11 +277,13 @@ def login():
 
     return render_template("login.html")
 
+
 @app.route("/logout")
 @login_required
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
 
 @app.route("/calendar")
 @login_required
@@ -289,8 +310,10 @@ def profile():
 
         if not first_name or not last_name:
             error = "Please enter your first and last name."
+
         elif not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
             error = "Please enter a valid email address."
+
         else:
             conn = get_db_connection()
 
@@ -298,15 +321,16 @@ def profile():
                 conn.execute(
                     """
                     UPDATE users
-                    SET first_name = ?, last_name = ?, email = ?
-                    WHERE id = ?
+                    SET first_name = %s, last_name = %s, email = %s
+                    WHERE id = %s
                     """,
                     (first_name, last_name, email, session["user_id"])
                 )
+
                 conn.commit()
                 message = "Profile updated successfully!"
 
-            except sqlite3.IntegrityError:
+            except psycopg.IntegrityError:
                 conn.rollback()
                 error = "This email address is already registered."
 
@@ -341,77 +365,91 @@ def change_password():
 
     conn = get_db_connection()
 
-    full_user = conn.execute(
-        "SELECT password_hash FROM users WHERE id = ?",
-        (session["user_id"],)
-    ).fetchone()
+    try:
+        full_user = conn.execute(
+            "SELECT password_hash FROM users WHERE id = %s",
+            (session["user_id"],)
+        ).fetchone()
 
-    if not check_password_hash(full_user["password_hash"], current_password):
-        conn.close()
+        if not check_password_hash(
+            full_user["password_hash"], current_password
+        ):
+            return render_template(
+                "profile.html",
+                user=user,
+                error="Your current password is incorrect."
+            )
+
+        password_pattern = (
+            r"^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s])\S{8,16}$"
+        )
+
+        if not re.match(password_pattern, new_password):
+            return render_template(
+                "profile.html",
+                user=user,
+                error=(
+                    "Password must be 8-16 characters and contain "
+                    "at least one uppercase letter, one number and "
+                    "one special symbol. Spaces are not allowed."
+                )
+            )
+
+        if new_password != confirm_password:
+            return render_template(
+                "profile.html",
+                user=user,
+                error="New passwords do not match."
+            )
+
+        if check_password_hash(full_user["password_hash"], new_password):
+            return render_template(
+                "profile.html",
+                user=user,
+                error=(
+                    "Your new password must be different from "
+                    "your current password."
+                )
+            )
+
+        new_hash = generate_password_hash(new_password)
+
+        conn.execute(
+            "UPDATE users SET password_hash = %s WHERE id = %s",
+            (new_hash, session["user_id"])
+        )
+
+        conn.commit()
+
         return render_template(
             "profile.html",
             user=user,
-            error="Your current password is incorrect."
+            message="Password changed successfully!"
         )
 
-    # Password validation
-    password_pattern = r"^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9\s])\S{8,16}$"
-
-    if not re.match(password_pattern, new_password):
+    finally:
         conn.close()
-        return render_template(
-            "profile.html",
-            user=user,
-            error="Password must be 8-16 characters and contain at least one uppercase letter, one number and one special symbol. Spaces are not allowed."
-        )
 
-    if new_password != confirm_password:
-        conn.close()
-        return render_template(
-            "profile.html",
-            user=user,
-            error="New passwords do not match."
-        )
-
-    if check_password_hash(full_user["password_hash"], new_password):
-        conn.close()
-        return render_template(
-            "profile.html",
-            user=user,
-            error="Your new password must be different from your current password."
-        )
-
-    new_hash = generate_password_hash(new_password)
-
-    conn.execute(
-        "UPDATE users SET password_hash = ? WHERE id = ?",
-        (new_hash, session["user_id"])
-    )
-
-    conn.commit()
-    conn.close()
-
-    return render_template(
-        "profile.html",
-        user=user,
-        message="Password changed successfully!"
-    )
 
 @app.route("/api/tasks", methods=["GET"])
 @login_required
 def get_tasks():
     conn = get_db_connection()
-    tasks = conn.execute(
-        """
-        SELECT * FROM tasks
-        WHERE user_id = ?
-        ORDER BY id DESC
-        """,
-        (session["user_id"],)
-    ).fetchall()
-    conn.close()
 
-    return jsonify([task_to_dict(task) for task in tasks])
+    try:
+        tasks = conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE user_id = %s
+            ORDER BY id DESC
+            """,
+            (session["user_id"],)
+        ).fetchall()
+
+        return jsonify([task_to_dict(task) for task in tasks])
+
+    finally:
+        conn.close()
 
 
 @app.route("/api/tasks", methods=["POST"])
@@ -435,27 +473,33 @@ def add_task():
         return jsonify({"error": "Invalid category"}), 400
 
     conn = get_db_connection()
-    cursor = conn.execute(
-        """
-        INSERT INTO tasks
-        (title, description, priority, due_date, category, user_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        (
-            title, description, priority, due_date,
-            category, session["user_id"]
+
+    try:
+        cursor = conn.execute(
+            """
+            INSERT INTO tasks
+            (title, description, priority, due_date, category, user_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                title, description, priority, due_date,
+                category, session["user_id"]
+            )
         )
-    )
 
-    conn.commit()
+        task_id = cursor.fetchone()["id"]
+        conn.commit()
 
-    task = conn.execute(
-        "SELECT * FROM tasks WHERE id = ? AND user_id = ?",
-        (cursor.lastrowid, session["user_id"])
-    ).fetchone()
+        task = conn.execute(
+            "SELECT * FROM tasks WHERE id = %s AND user_id = %s",
+            (task_id, session["user_id"])
+        ).fetchone()
 
-    conn.close()
-    return jsonify(task_to_dict(task)), 201
+        return jsonify(task_to_dict(task)), 201
+
+    finally:
+        conn.close()
 
 
 @app.route("/api/tasks/<int:task_id>", methods=["PUT"])
@@ -479,32 +523,35 @@ def update_task(task_id):
         return jsonify({"error": "Invalid category"}), 400
 
     conn = get_db_connection()
-    cursor = conn.execute(
-        """
-        UPDATE tasks
-        SET title = ?, description = ?, priority = ?,
-            due_date = ?, category = ?
-        WHERE id = ? AND user_id = ?
-        """,
-        (
-            title, description, priority, due_date,
-            category, task_id, session["user_id"]
+
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE tasks
+            SET title = %s, description = %s, priority = %s,
+                due_date = %s, category = %s
+            WHERE id = %s AND user_id = %s
+            """,
+            (
+                title, description, priority, due_date,
+                category, task_id, session["user_id"]
+            )
         )
-    )
 
-    conn.commit()
+        conn.commit()
 
-    if cursor.rowcount == 0:
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Task not found"}), 404
+
+        task = conn.execute(
+            "SELECT * FROM tasks WHERE id = %s AND user_id = %s",
+            (task_id, session["user_id"])
+        ).fetchone()
+
+        return jsonify(task_to_dict(task))
+
+    finally:
         conn.close()
-        return jsonify({"error": "Task not found"}), 404
-
-    task = conn.execute(
-        "SELECT * FROM tasks WHERE id = ? AND user_id = ?",
-        (task_id, session["user_id"])
-    ).fetchone()
-
-    conn.close()
-    return jsonify(task_to_dict(task))
 
 
 @app.route("/api/tasks/<int:task_id>/toggle", methods=["PATCH"])
@@ -512,41 +559,43 @@ def update_task(task_id):
 def toggle_task(task_id):
     conn = get_db_connection()
 
-    task = conn.execute(
-        """
-        SELECT * FROM tasks
-        WHERE id = ? AND user_id = ?
-        """,
-        (task_id, session["user_id"])
-    ).fetchone()
+    try:
+        task = conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE id = %s AND user_id = %s
+            """,
+            (task_id, session["user_id"])
+        ).fetchone()
 
-    if task is None:
+        if task is None:
+            return jsonify({"error": "Task not found"}), 404
+
+        new_status = 0 if task["completed"] else 1
+
+        conn.execute(
+            """
+            UPDATE tasks
+            SET completed = %s
+            WHERE id = %s AND user_id = %s
+            """,
+            (new_status, task_id, session["user_id"])
+        )
+
+        conn.commit()
+
+        updated_task = conn.execute(
+            """
+            SELECT * FROM tasks
+            WHERE id = %s AND user_id = %s
+            """,
+            (task_id, session["user_id"])
+        ).fetchone()
+
+        return jsonify(task_to_dict(updated_task))
+
+    finally:
         conn.close()
-        return jsonify({"error": "Task not found"}), 404
-
-    new_status = 0 if task["completed"] else 1
-
-    conn.execute(
-        """
-        UPDATE tasks
-        SET completed = ?
-        WHERE id = ? AND user_id = ?
-        """,
-        (new_status, task_id, session["user_id"])
-    )
-
-    conn.commit()
-
-    updated_task = conn.execute(
-        """
-        SELECT * FROM tasks
-        WHERE id = ? AND user_id = ?
-        """,
-        (task_id, session["user_id"])
-    ).fetchone()
-
-    conn.close()
-    return jsonify(task_to_dict(updated_task))
 
 
 @app.route("/api/tasks/<int:task_id>", methods=["DELETE"])
@@ -554,21 +603,24 @@ def toggle_task(task_id):
 def delete_task(task_id):
     conn = get_db_connection()
 
-    cursor = conn.execute(
-        """
-        DELETE FROM tasks
-        WHERE id = ? AND user_id = ?
-        """,
-        (task_id, session["user_id"])
-    )
+    try:
+        cursor = conn.execute(
+            """
+            DELETE FROM tasks
+            WHERE id = %s AND user_id = %s
+            """,
+            (task_id, session["user_id"])
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    if cursor.rowcount == 0:
-        return jsonify({"error": "Task not found"}), 404
+        if cursor.rowcount == 0:
+            return jsonify({"error": "Task not found"}), 404
 
-    return jsonify({"message": "Task deleted successfully"})
+        return jsonify({"message": "Task deleted successfully"})
+
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

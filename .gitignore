@@ -1,9 +1,16 @@
-
 venv/
 .venv/
 __pycache__/
 *.pyc
+
 .env
+.env.*
+!.env.example
+
 *.db
 *.sqlite
 *.sqlite3
+
+inspect_db.py
+migrate_to_neon.py
+test_neon.py
